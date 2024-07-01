@@ -1,185 +1,50 @@
-const container_facs_1 = document.getElementById("container_facs_1");
-const text_wrapper = document.getElementById("text-resize");
-container_facs_1.style.height = `${String(screen.height / 2)}px`;
 /*
 ##################################################################
-get all image urls stored in span el class tei-xml-images
-creates an array for osd viewer with static images
+get container holding the transcribed text
+get container in which the osd viewer renders its div
 ##################################################################
 */
-const navbar_wrapper = document.getElementById("wrapper-navbar");
-const image_rights = document.getElementsByClassName("image_rights")[0];
+// string vars: input / cfg section
 
-function calculate_facsContainer_height() {
-  // calcutlates hight of osd container based on heigt of screen - (height of navbar + img rights&buttons)
-  let image_rights_height = image_rights.getBoundingClientRect().height;
-  let new_container_height =
-    window.innerHeight -
-    (window.innerHeight / 10 + //this is necessary, cause container has fixed top val of 10%
-      image_rights_height);
-  return Math.round(new_container_height);
-}
-
-// initially resizing the facs container to max
-// needs to be done before calling the viewer constructor,
-// since it doesnt update size
-resize_facsContainer();
-
-var pb_elements = document.getElementsByClassName("pb");
-var pb_elements_array = Array.from(pb_elements);
-var tileSources = [];
-var img = pb_elements[0].getAttribute("source");
-var imageURL = {
-  type: "image",
-  url: img,
-};
-tileSources.push(imageURL);
-
+const OSD_container_spawnpoint_id = "OSD-container-spawnpoint";
+const iiif_server_base_path =
+  "https://iiif.acdh.oeaw.ac.at/iiif/images/todesurteile/";
+const iiif_attribs = "/full/max/0/default.jpg";
+const page_break_marker_classname = "pb";
+const page_break_marker_image_attribute = "source";
 /*
-##################################################################
-initialize osd
-##################################################################
+Change theses values to negative percentates/px if you want to narrow/expand
+the region of the viewport whicht triggers a reload.
+One possibly irritating behavior can be, that clicking on prev/next button 
+scrolls the pb element outside the screen region that triggers reload. If this 
+region is being empty, when the debounced function is running, no new image will 
+be loaded. Expand the region that triggers reload in this case or increase the
+top scroll offset of the targeted bp elements
 */
-const viewer = new OpenSeadragon.Viewer({
-  id: "container_facs_1",
-  prefixUrl:
-    "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
-  tileSources: tileSources,
-  visibilityRatio: 1,
-  sequenceMode: true,
-  showNavigationControl: true,
-  showNavigator: false,
-  showSequenceControl: false,
-  showZoomControl: true,
-  zoomInButton: "osd_zoom_in_button",
-  zoomOutButton: "osd_zoom_out_button",
-  homeButton: "osd_zoom_reset_button",
-  constrainDuringPan: true,
-});
-
-viewer.viewport.goHome = function () {
-  fitVertically_align_left_bottom();
-};
-
-function fitVertically_align_left_bottom() {
-  let initial_bounds = viewer.viewport.getBounds();
-  let ratio = initial_bounds.width / initial_bounds.height;
-  let tiledImage = viewer.world.getItemAt(viewer.world.getItemCount() - 1);
-  if (ratio > tiledImage.contentAspectX) {
-    var new_width = tiledImage.normHeight * ratio;
-    var new_bounds = new OpenSeadragon.Rect(
-      0,
-      0,
-      new_width,
-      tiledImage.normHeight
-    );
-  } else {
-    var new_height = 1 / ratio;
-    let bounds_y = -(new_height - tiledImage.normHeight);
-    var new_bounds = new OpenSeadragon.Rect(0, bounds_y, 1, new_height);
-  }
-  viewer.viewport.fitBounds(new_bounds, true);
-}
-
-viewer.addHandler("tile-loaded", (x) => {
-  fitVertically_align_left_bottom(viewer);
-});
-/*
-##################################################################
-index and previous index for click navigation in osd0viewer
-locate index of anchor element
-##################################################################
-*/
-var next_pb_index = 0;
-var previous_pb_index = -1;
-const a_elements = document.getElementsByClassName("anchor-pb");
-const max_index = a_elements.length - 1;
-const prev = document.getElementById("osd_prev_button");
-const next = document.getElementById("osd_next_button");
-
-/* test with intersection observer */
-// defines how much of viewport should be igno
-/* These two values define the size of the part
-of the viewport that should trigger an image reload
-whenever it gets enterd by a pb element. Negative values
-make that zone smaller, positive expand it.*/
-let top_viewport_threshold = "-5%";
-let bottom_viewport_threshold = "-85%";
+const top_viewport_threshold = "0px";
+const bottom_viewport_threshold = "-65%";
 // this is the options object for the intersection observer
-let io_options = {
+const io_options = {
   rootMargin: `${top_viewport_threshold} 0% ${bottom_viewport_threshold} 0%`,
 };
-/* this function changes the indexnumbers to keept
-the buttons up to date and triggers the image loading*/
-function handle_new_image(current_pb_element) {
-  let current_pb_index = pb_elements_array.findIndex(
-    (el) => el === current_pb_element
-  );
-  next_pb_index = current_pb_index + 1;
-  previous_pb_index = current_pb_index - 1;
-  new_image_url = current_pb_element.getAttribute("source");
-  old_image = viewer.world.getItemAt(0);
-  load_new_image(new_image_url, old_image);
+
+// get relevant elements/values
+const OSD_container_spawnpoint = document.getElementById(
+  OSD_container_spawnpoint_id
+);
+// const transcript_container = document.getElementById(transcript_container_id)
+const height = screen.height;
+
+// helper functions
+// iiif stuff
+function get_iif_link(filename) {
+  return `${iiif_server_base_path}${filename}${iiif_attribs}`;
 }
 
-function load_new_image(new_image_url, old_image) {
-  viewer.addSimpleImage({
-    url: new_image_url,
-    success: function (event) {
-      function ready() {
-        viewer.world.removeItem(old_image);
-      }
-      // test if item was loaded and trigger function to remove previous item
-      if (event.item) {
-        ready();
-      } else {
-        event.item.addOnceHandler("fully-loaded-change", ready());
-      }
-    },
-  });
+function isVisible(el) {
+  var style = window.getComputedStyle(el);
+  return style.display !== "none";
 }
-
-function debounce(callback, wait) {
-  let timeoutId = null;
-  return (...args) => {
-    window.clearTimeout(timeoutId);
-    timeoutId = window.setTimeout(() => {
-      callback(...args);
-    }, wait);
-  };
-}
-
-/*this function is the callback for the intersection observer
-it gets called whenever an element leaves or enters the defined 
-section of the viewport*/
-var last_loaded_entry = "";
-function handle_visible_lbs(entries, observer) {
-  entries.forEach((entry) => {
-    var intersecting = entries.filter((entry) => entry.isIntersecting == true);
-    if (intersecting.length > 0) {
-      first_intersecting_entry = intersecting[0];
-      if (first_intersecting_entry != last_loaded_entry) {
-        handle_new_image(first_intersecting_entry.target);
-        last_loaded_entry = first_intersecting_entry;
-      }
-    }
-  });
-}
-
-const debounced_lb_handler = debounce(handle_visible_lbs, 1000);
-// create the observer, its default scope (root element) is the viewport,
-// but you could change it eg. to body etc.
-let viewportObserver = new IntersectionObserver(handle_visible_lbs, io_options);
-// give the observer some lbs to observer
-pb_elements_array.forEach((entry) => {
-  viewportObserver.observe(entry);
-});
-
-// since the page loading process is sometimes hard to predict
-// it might happen that the loading the page with an url anchor param
-// doesn't trigger the intersectionobserver callback
-// to prevent any hassle the following functions handle the inital scrolling
-// if such param is present in url
 
 function isInViewport(element) {
   // Get the bounding client rectangle position in the viewport
@@ -198,46 +63,185 @@ function isInViewport(element) {
   }
 }
 
+// simple implementation of debounce
+// prevents loading a lot of images when
+// scrolling fast through the page
+// without setting unnecessary heuristic timeouts
+function debounce(callback, wait) {
+  let timeoutId = null;
+  return (...args) => {
+    window.clearTimeout(timeoutId);
+    timeoutId = window.setTimeout(() => {
+      callback(...args);
+    }, wait);
+  };
+}
+
+function scroll_prev() {
+  if (previous_pb_index == -1) {
+    pb_elements[0].scrollIntoView();
+  } else {
+    pb_elements[previous_pb_index].scrollIntoView();
+  }
+}
+
+function scroll_next() {
+  if (next_pb_index > max_index) {
+    pb_elements[max_index].scrollIntoView();
+  } else {
+    pb_elements[next_pb_index].scrollIntoView();
+  }
+}
+
+// since the page loading process is sometimes hard to predict
+// it might happen that the loading the page with an url anchor param
+// doesn't trigger the intersectionobserver callback
+// to prevent any hassle the following functions handle the inital scrolling
+// if such param is present in url
+
 function load_initial_image() {
+  // depending on the margins you set for you intersection observer
+  // and the position of you lb elements on the page the initial image
+  //   might not be in the observerd zone when the page is loaded, such that
+  //   no image is loaded when the page is loaded. Try removing the conditional
+  //   check for a window hash in this function if you encounter this problem
   if (window.location.hash) {
     let first_pb_element_in_viewport = undefined;
     for (let pb_element of pb_elements) {
       if (isInViewport(pb_element)) {
         first_pb_element_in_viewport = pb_element;
         break;
-      };
-    };
+      }
+    }
+    if (viewer.world.getItemCount() > 1) {
+      viewer.world.removeItem(viewer.world.getItemAt(1));
+    }
     handle_new_image(first_pb_element_in_viewport);
   }
 }
 
-load_initial_image();
 /*
 ##################################################################
-accesses osd viewer prev and next button to switch image and
-scrolls to next or prev span element with class pb (pagebreak)
+get all image urls stored in span el class tei-xml-images
+creates an array for osd viewer with static images
+##################################################################
+*/
+var pb_elements = document.getElementsByClassName(page_break_marker_classname);
+var pb_elements_array = Array.from(pb_elements);
+
+/*
+##################################################################
+initialize osd
 ##################################################################
 */
 
+let initial_osd_visible = isVisible(OSD_container_spawnpoint);
+if (initial_osd_visible) {
+  OSD_container_spawnpoint.style.height = `${String(height / 1.5)}px`;
+  OSD_container_spawnpoint.style.width = "auto";
+}
+var viewer = OpenSeadragon({
+  id: OSD_container_spawnpoint_id,
+  prefixUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.0.0/images/",
+  sequenceMode: true,
+  showNavigator: true,
+  constrainDuringPan: true,
+  visibilityRatio: 1,
+  showNavigationControl: true,
+  showSequenceControl: true,
+});
+
+// if anybody can explain to me, why I need that function
+// even though I defined a callback in the image loader, removing the old
+// image, I would be really happy or at least a little bit
+viewer.world.addHandler("add-item", () => {
+  while (viewer.world.getItemCount() > 1) {
+    console.log(viewer.world.getItemCount());
+    viewer.world.removeItem(viewer.world.getItemAt(0));
+  }
+  console.log(viewer.world.getItemCount());
+});
+/*
+##################################################################
+index and previous index for click navigation in osd viewer
+locate index of anchor element
+##################################################################
+*/
+
+var next_pb_index = 0;
+var previous_pb_index = -1;
+const max_index = pb_elements.length - 1;
+var prev = document.querySelector("div[title='Previous page']");
+var next = document.querySelector("div[title='Next page']");
 prev.style.opacity = 1;
 next.style.opacity = 1;
 
-function scroll_prev() {
-  if (previous_pb_index == -1) {
-    a_elements[0].scrollIntoView();
-  } else {
-    a_elements[previous_pb_index].scrollIntoView();
-  }
+/* These two values define the size of the part
+of the viewport that should trigger an image reload
+whenever it gets enterd by a pb element. Negative values
+make that zone smaller, positive expand it.*/
+function handle_new_image(current_pb_element) {
+  let current_pb_index = pb_elements_array.findIndex(
+    (el) => el === current_pb_element
+  );
+  next_pb_index = current_pb_index + 1;
+  previous_pb_index = current_pb_index - 1;
+  new_image_url = get_iif_link(
+    current_pb_element.getAttribute(page_break_marker_image_attribute)
+  );
+  old_image = viewer.world.getItemAt(0);
+  load_new_image_with_check(new_image_url, old_image);
 }
 
-function scroll_next() {
-  if (next_pb_index > max_index) {
-    a_elements[max_index].scrollIntoView();
-  } else {
-    a_elements[next_pb_index].scrollIntoView();
-  }
+function load_new_image_with_check(new_image_url, old_image) {
+  viewer.addSimpleImage({
+    url: new_image_url,
+    success: function (event) {
+      function ready() {
+        if (viewer.world.getItemCount() > 1 && old_image) {
+          viewer.world.removeItem(old_image);
+        }
+      }
+      // test if item was loaded and trigger function to remove previous item
+      if (event.item) {
+        ready();
+      } else {
+        event.item.addOnceHandler("fully-loaded-change", ready());
+      }
+    },
+  });
 }
 
+
+/*this function is the callback for the intersection observer
+it gets called whenever an element leaves or enters the defined 
+section of the viewport*/
+var last_loaded_entry = "";
+function handle_visible_lbs(entries, observer) {
+  entries.forEach((entry) => {
+    var intersecting = entries.filter((entry) => entry.isIntersecting == true);
+    if (intersecting.length > 0) {
+      first_intersecting_entry = intersecting[0];
+      if (first_intersecting_entry != last_loaded_entry) {
+        handle_new_image(first_intersecting_entry.target);
+        last_loaded_entry = first_intersecting_entry;
+      }
+    }
+  });
+}
+
+/*
+ call some stuff
+*/
+const debounced_lb_handler = debounce(handle_visible_lbs, 1000);
+// create the observer, its default scope (root element) is the viewport,
+// but you could change it eg. to body etc.
+let viewportObserver = new IntersectionObserver(handle_visible_lbs, io_options);
+// give the observer some lbs to observer
+pb_elements_array.forEach((entry) => {
+  viewportObserver.observe(entry);
+});
 prev.addEventListener("click", () => {
   scroll_prev();
 });
@@ -245,26 +249,6 @@ next.addEventListener("click", () => {
   scroll_next();
 });
 
-/*
-##################################################################
-functions to check the size of facs container
-##################################################################
-*/
-
-/* change size of facs container */
-function resize_facsContainer() {
-  let new_container_height = calculate_facsContainer_height();
-  if (new_container_height != container_facs_1.clientHeight) {
-    container_facs_1.style.height = `${String(new_container_height)}px`;
-    return true;
-  }
-  return false;
+if (initial_osd_visible) {
+  load_initial_image();
 }
-
-addEventListener("resize", function (event) {
-  let resized = resize_facsContainer();
-  if (resized) {
-    viewer.forceResize();
-    fitVertically_align_left_bottom(viewer);
-  }
-});
