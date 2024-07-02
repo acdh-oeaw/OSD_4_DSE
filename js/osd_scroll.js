@@ -198,21 +198,25 @@ function load_new_image_with_check(new_image_url, old_image) {
   viewer.addSimpleImage({
     url: new_image_url,
     success: function (event) {
-      function ready() {
+      function remove_previous_image() {
         if (viewer.world.getItemCount() > 1 && old_image) {
           viewer.world.removeItem(old_image);
         }
       }
       // test if item was loaded and trigger function to remove previous item
       if (event.item) {
-        ready();
-      } else {
-        event.item.addOnceHandler("fully-loaded-change", ready());
+        if (event.item.getFullyLoaded()) {
+          remove_previous_image();
+        } else {
+          event.item.addOnceHandler(
+            "fully-loaded-change",
+            remove_previous_image()
+          );
+        }
       }
     },
   });
 }
-
 
 /*this function is the callback for the intersection observer
 it gets called whenever an element leaves or enters the defined 
